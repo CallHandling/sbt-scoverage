@@ -3,7 +3,9 @@ package scoverage
 import sbt.Keys._
 import sbt._
 import sbt.plugins.JvmPlugin
-import scoverage.report.{CoverageAggregator, CoberturaXmlWriter, ScoverageHtmlWriter, ScoverageXmlWriter}
+import scoverage.report.{CoberturaXmlWriter, CoverageAggregator, ScoverageHtmlWriter, ScoverageXmlWriter}
+
+import scala.util.matching.Regex
 
 object ScoverageSbtPlugin extends AutoPlugin {
 
@@ -16,6 +18,8 @@ object ScoverageSbtPlugin extends AutoPlugin {
   lazy val ScoveragePluginConfig = config("scoveragePlugin").hide
 
   import autoImport._
+
+  def excludeRegex(value: String): Array[Regex] = value.split(";").map(_.trim).filterNot(_.isEmpty).map(_.r)
 
   val aggregateFilter = ScopeFilter(inAggregates(ThisProject),
     inConfigurations(Compile)) // must be outside of the 'coverageAggregate' task (see: https://github.com/sbt/sbt/issues/1095 or https://github.com/sbt/sbt/issues/780)
@@ -111,6 +115,7 @@ object ScoverageSbtPlugin extends AutoPlugin {
 
     loadCoverage(target, log) match {
       case Some(cov) =>
+        //val excludeRegex: Array[Regex] = coverageExcludedFiles.value.split(";").map(_.trim).filterNot(_.isEmpty).map(_.r)
         writeReports(
           target,
           (sourceDirectories in Compile).value,
@@ -121,7 +126,8 @@ object ScoverageSbtPlugin extends AutoPlugin {
           coverageOutputDebug.value,
           coverageOutputTeamCity.value,
           sourceEncoding((scalacOptions in (Compile)).value),
-          log)
+          log,
+          excludeRegex(coverageExcludedFiles.value))
 
         checkCoverage(cov, log, coverageMinimum.value, coverageFailOnMinimum.value)
       case None => log.warn("No coverage data, skipping reports")
@@ -146,7 +152,8 @@ object ScoverageSbtPlugin extends AutoPlugin {
           coverageOutputDebug.value,
           coverageOutputTeamCity.value,
           sourceEncoding((scalacOptions in (Compile)).value),
-          log)
+          log,
+          excludeRegex(coverageExcludedFiles.value))
         val cfmt = cov.statementCoverageFormatted
         log.info(s"Aggregation complete. Coverage was [$cfmt]")
 
@@ -165,7 +172,16 @@ object ScoverageSbtPlugin extends AutoPlugin {
                            coverageDebug: Boolean,
                            coverageOutputTeamCity: Boolean,
                            coverageSourceEncoding: Option[String],
-                           log: Logger): Unit = {
+                           log: Logger,
+                           excludeRegex: Array[Regex]): Unit = {
+    val newCov = coverage.statements.foldLeft(Coverage()){(cov,stmt) =>
+      if (excludeRegex.exists(_.findFirstIn(stmt.source.trim).isDefined)) cov
+      else {
+        cov.add(stmt)
+        cov
+      }
+    }
+
     log.info(s"Generating scoverage reports...")
 
     val coberturaDir = crossTarget / "coverage-report"
@@ -174,29 +190,29 @@ object ScoverageSbtPlugin extends AutoPlugin {
     reportDir.mkdirs()
 
     if (coverageOutputCobertura) {
-      new CoberturaXmlWriter(compileSourceDirectories, coberturaDir).write(coverage)
+      new CoberturaXmlWriter(compileSourceDirectories, coberturaDir).write(newCov)
       log.info(s"Written Cobertura report [${coberturaDir.getAbsolutePath}/cobertura.xml]")
     }
 
     if (coverageOutputXML) {
-      new ScoverageXmlWriter(compileSourceDirectories, reportDir, false).write(coverage)
+      new ScoverageXmlWriter(compileSourceDirectories, reportDir, false).write(newCov)
       if (coverageDebug) {
-        new ScoverageXmlWriter(compileSourceDirectories, reportDir, true).write(coverage)
+        new ScoverageXmlWriter(compileSourceDirectories, reportDir, true).write(newCov)
       }
       log.info(s"Written XML coverage report [${reportDir.getAbsolutePath}/scoverage.xml]")
     }
 
     if (coverageOutputHTML) {
-      new ScoverageHtmlWriter(compileSourceDirectories, reportDir, coverageSourceEncoding).write(coverage)
+      new ScoverageHtmlWriter(compileSourceDirectories, reportDir, coverageSourceEncoding).write(newCov)
       log.info(s"Written HTML coverage report [${reportDir.getAbsolutePath}/index.html]")
     }
     if (coverageOutputTeamCity) {
-      reportToTeamcity(coverage, coverageOutputHTML, reportDir, crossTarget, log)
+      reportToTeamcity(newCov, coverageOutputHTML, reportDir, crossTarget, log)
       log.info("Written coverage report to TeamCity")
     }
 
-    log.info(s"Statement coverage.: ${coverage.statementCoverageFormatted}%")
-    log.info(s"Branch coverage....: ${coverage.branchCoverageFormatted}%")
+    log.info(s"Statement coverage.: ${newCov.statementCoverageFormatted}%")
+    log.info(s"Branch coverage....: ${newCov.branchCoverageFormatted}%")
     log.info("Coverage reports completed")
   }
 
