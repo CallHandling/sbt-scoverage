@@ -12,7 +12,10 @@ resolvers ++= {
 
 libraryDependencies += "org.scoverage" %% "scalac-scoverage-plugin" % "1.4.0-M3"
 
-publishMavenStyle := true
+
+publishMavenStyle := false
+
+publishTo := Some(Resolver.url("Ngage IVY Repo", url("s3://ngage-ivy.s3-eu-west-1.amazonaws.com/snapshot"))(Resolver.ivyStylePatterns))
 
 publishArtifact in Test := false
 
@@ -38,12 +41,6 @@ releaseProcess := Seq[ReleaseStep](
 
 releaseCrossBuild := false
 
-publishTo := {
-  if (isSnapshot.value)
-    Some("snapshots" at "https://oss.sonatype.org/content/repositories/snapshots")
-  else
-    Some("releases" at "https://oss.sonatype.org/service/local/staging/deploy/maven2")
-}
 
 pomExtra := {
   <url>https://github.com/scoverage/sbt-scoverage</url>
