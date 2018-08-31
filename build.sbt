@@ -15,7 +15,7 @@ libraryDependencies += "org.scoverage" %% "scalac-scoverage-plugin" % "1.4.0-M3"
 
 publishMavenStyle := false
 
-publishTo := Some(Resolver.url("Ngage IVY Repo", url("s3://ngage-ivy.s3-eu-west-1.amazonaws.com/snapshot"))(Resolver.ivyStylePatterns))
+publishTo := Some(Resolver.url("Ngage IVY Repo", url("https://mymavenrepo.com/repo/U8GExHQdeWdsvam4NmO3/"))(Resolver.ivyStylePatterns))
 
 publishArtifact in Test := false
 
